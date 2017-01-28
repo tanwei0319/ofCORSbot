@@ -3,11 +3,12 @@ from telegram import Bot, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 
 import json
-from pymongo import MongoClient
-from pymongo import ReturnDocument
+from pymongo import MongoClient, ReturnDocument
 from datetime import datetime
 from credentials import TOKEN, APP_URL
 from os import environ # path
+import requests
+from bs4 import BeautifulSoup
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -17,6 +18,55 @@ FACULTIES = ("SCHOOL OF BUSINESS", "SCIENCE", "ENGINEERING", "SCHOOL OF COMPUTIN
 ROUNDS = ("Round 1A", "Round 1B", "Round 1C", "Round 2A", "Round 2B", "Round 3A", "Round 3B")
 
 #non-bot functions
+#returns json for a particular bidding round
+def scrape(round):
+	url = "http://www.cors.nus.edu.sg/Archive/201617_Sem1/successbid_" + round + "_20162017s1.html"
+	result = requests.get(url)
+
+	soup = BeautifulSoup(result.content, 'lxml')
+	rows = soup.findAll("tr")
+	modules = []
+	numRows = len(rows)
+
+	for index in range(2, numRows):
+		row = rows[index]
+		cols = row.findAll("p")
+
+		if len(cols) == 7:
+			infoObj = {}
+			infoObj["moduleQuota"] = cols[0].text
+			infoObj["numBidders"] = cols[1].text
+			infoObj["lowestBid"] = cols[2].text
+			infoObj["succBid"] = cols[3].text
+			infoObj["highestBid"] = cols[4].text
+			infoObj["faculty"] = cols[5].text
+			infoObj["studentType"] = cols[6].text
+			module["info"].append(infoObj)
+		else:
+			module = {}
+			module["moduleCode"] = cols[0].text
+			module["moduleGroup"] = cols[1].text
+			module["info"] = []
+			infoObj = {}
+			infoObj["moduleQuota"] = cols[2].text
+			infoObj["numBidders"] = cols[3].text
+			infoObj["lowestBid"] = cols[4].text
+			infoObj["succBid"] = cols[5].text
+			infoObj["highestBid"] = cols[6].text
+			infoObj["faculty"] = cols[7].text
+			infoObj["studentType"] = cols[8].text
+			module["info"].append(infoObj)
+		if index == numRows - 1: 
+			modules.append(module)
+		else:
+			nextRow = rows[index + 1]
+			numCols = nextRow.findAll("p")
+			if len(numCols) == 9:
+				modules.append(module)
+
+	return modules
+
+
 def getRounds(moduleCode, chat_id, record):
     userFaculty = record["faculty"]
     userStudentType = record["studentType"]
@@ -205,48 +255,29 @@ def main():
     global round3ASum
     global round3BSum
 
-    # global rounds
-    # rounds = []
     global summaries
     summaries = []
 
     #import summaries
-    with open('round1ASumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round1A = data["round1Asumm"]
+    round1A = scrape("1A")
     summaries.append(round1A)
 
-    with open('round1BSumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round1B = data["round1Bsumm"]
+    round1B = scrape("1B")
     summaries.append(round1B)
 
-    with open('round1CSumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round1C = data["round1Csumm"]
+    round1C = scrape("1C")
     summaries.append(round1C)
 
-    with open('round2ASumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round2A = data["round2Asumm"]    
+    round2A = scrape("2A") 
     summaries.append(round2A)
 
-
-    with open('round2BSumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round2B = data["round2Bsumm"]  
+    round2B = scrape("2B")
     summaries.append(round2B)
 
-
-    with open('round3ASumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round3A = data["round3Asumm"]
+    round3A = scrape("3A")
     summaries.append(round3A)
 
-
-    with open('round3BSumm.json', 'r') as json_data:
-        data = json.load(json_data)
-    round3B = data["round3Bsumm"]
+    round3B = scrape("3B")
     summaries.append(round3B)
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
